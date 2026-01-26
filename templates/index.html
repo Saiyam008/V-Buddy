@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRE Vocabulary Flashcards</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div id="app">
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="nav-container">
+                <h1 class="logo">📚 GRE Vocabulary</h1>
+                <div class="nav-buttons">
+                    <button id="dashboardBtn" class="nav-btn" onclick="goToDashboard()">Dashboard</button>
+                    <button id="resetBtn" class="nav-btn danger" onclick="resetProgress()" style="display:none;">Reset Progress</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Container -->
+        <div class="container">
+            <!-- List Selection Screen -->
+            <div id="selectionScreen" class="screen active">
+                <div class="selection-content">
+                    <h2>Select Lists to Study</h2>
+                    <p class="subtitle">You can select one or multiple lists</p>
+                    
+                    <div class="list-selector">
+                        <div id="listCheckboxes" class="checkbox-grid">
+                            <!-- Checkboxes will be populated here -->
+                        </div>
+                    </div>
+
+                    <!-- Filter Section -->
+                    <div class="filter-section">
+                        <h3>Filter Words By Status</h3>
+                        <p class="filter-subtitle">Select which word statuses to include (default: all selected)</p>
+                        <div class="filter-toggles">
+                            <label class="toggle-item">
+                                <input type="checkbox" id="filterKnown" checked onchange="updateFilterSelection()">
+                                <span class="toggle-box known"></span>
+                                <span class="toggle-label">Known</span>
+                            </label>
+                            <label class="toggle-item">
+                                <input type="checkbox" id="filterFlagged" checked onchange="updateFilterSelection()">
+                                <span class="toggle-box flagged"></span>
+                                <span class="toggle-label">Flagged</span>
+                            </label>
+                            <label class="toggle-item">
+                                <input type="checkbox" id="filterUnmarked" checked onchange="updateFilterSelection()">
+                                <span class="toggle-box unmarked"></span>
+                                <span class="toggle-label">Unmarked</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="selection-stats">
+                        <p id="selectedCount">0 lists selected</p>
+                        <p id="totalWordsCount"></p>
+                    </div>
+                    
+                    <button id="startBtn" class="btn btn-primary" onclick="startSession()" disabled>
+                        Start Study Session
+                    </button>
+                </div>
+            </div>
+
+            <!-- Flashcard Screen -->
+            <div id="flashcardScreen" class="screen">
+                <div class="flashcard-container">
+                    <!-- Progress Bar -->
+                    <div class="progress-section">
+                        <div class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <div class="progress-text">
+                            <span id="currentWord">1</span> / <span id="totalWords">100</span>
+                        </div>
+                    </div>
+
+                    <!-- Main Flashcard -->
+                    <div class="flashcard-wrapper">
+                        <div id="flashcard" class="flashcard" onclick="revealGroup()">
+                            <div class="flashcard-content">
+                                <p class="flashcard-label">Word</p>
+                                <p id="wordDisplay" class="flashcard-word">Click to start</p>
+                                <p class="flashcard-hint">Click card to reveal group</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Group Display (revealed on click) -->
+                        <div id="groupInfo" class="group-info hidden">
+                            <p class="group-label">Word Group</p>
+                            <p id="groupDisplay" class="group-name"></p>
+                        </div>
+                    </div>
+
+                    <!-- State Buttons -->
+                    <div class="button-group">
+                        <button class="btn btn-flag" onclick="markWord('flagged')">
+                            🚩 Flag
+                        </button>
+                        <button class="btn btn-known" onclick="markWord('known')">
+                            ✓ Known
+                        </button>
+                        <button class="btn btn-skip" onclick="markWord('unattempted')">
+                            ⊘ Skip
+                        </button>
+                    </div>
+
+                    <!-- Navigation -->
+                    <div class="nav-controls">
+                        <button id="prevBtn" class="btn btn-secondary" onclick="previousWord()">
+                            ← Previous
+                        </button>
+                        <button id="nextBtn" class="btn btn-secondary" onclick="nextWord()">
+                            Next →
+                        </button>
+                    </div>
+
+                    <!-- Session Info -->
+                    <div class="session-info">
+                        <div class="info-badge">Known: <span id="knownCount">0</span></div>
+                        <div class="info-badge flagged">Flagged: <span id="flaggedCount">0</span></div>
+                        <div class="info-badge">Skipped: <span id="skippedCount">0</span></div>
+                    </div>
+
+                    <!-- End Session Button -->
+                    <button class="btn btn-exit" onclick="endSession()">
+                        Exit Session
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dashboard Screen -->
+            <div id="dashboardScreen" class="screen">
+                <div class="dashboard-content">
+                    <h2>Progress Dashboard</h2>
+                    
+                    <div class="dashboard-controls">
+                        <button class="btn btn-secondary" onclick="goToSelection()">
+                            ← Back to Selection
+                        </button>
+                        <button class="btn btn-danger" onclick="resetProgressConfirm()">
+                            Clear All Progress
+                        </button>
+                    </div>
+
+                    <div id="dashboardStats" class="dashboard-grid">
+                        <!-- Stats will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="spinner hidden">
+        <div class="spinner-ring"></div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Confirm Action</h3>
+            <p id="confirmMessage">Are you sure?</p>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeConfirm()">Cancel</button>
+                <button class="btn btn-danger" id="confirmBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
