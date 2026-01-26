@@ -248,8 +248,6 @@ def reset_progress():
 
 if __name__ == '__main__':
     import os
-    # Use port 7860 for Hugging Face Spaces, fallback to 5000 for local
-    port = int(os.environ.get('PORT', 7860))
-    # Only use debug mode if running locally
+    port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV') == 'development'
     app.run(debug=debug, host='0.0.0.0', port=port)
