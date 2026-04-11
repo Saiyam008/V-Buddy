@@ -12,9 +12,17 @@
         <nav class="navbar">
             <div class="nav-container">
                 <h1 class="logo">📚 GRE Vocabulary</h1>
+                <div class="nav-search">
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="Search a word…" autocomplete="off" oninput="handleSearchInput(this.value)" onkeydown="handleSearchKey(event)">
+                        <span class="search-icon">🔍</span>
+                        <div id="searchDropdown" class="search-dropdown hidden"></div>
+                    </div>
+                </div>
                 <div class="nav-buttons">
                     <button id="dashboardBtn" class="nav-btn" onclick="goToDashboard()">Dashboard</button>
                     <button id="resetBtn" class="nav-btn danger" onclick="resetProgress()" style="display:none;">Reset Progress</button>
+                    <a href="/logout" class="nav-btn logout-btn">Logout ({{ username }})</a>
                 </div>
             </div>
         </nav>
@@ -28,12 +36,9 @@
                     <p class="subtitle">You can select one or multiple lists</p>
                     
                     <div class="list-selector">
-                        <div id="listCheckboxes" class="checkbox-grid">
-                            <!-- Checkboxes will be populated here -->
-                        </div>
+                        <div id="listCheckboxes" class="checkbox-grid"></div>
                     </div>
 
-                    <!-- Filter Section -->
                     <div class="filter-section">
                         <h3>Filter Words By Status</h3>
                         <p class="filter-subtitle">Select which word statuses to include (default: all selected)</p>
@@ -70,7 +75,6 @@
             <!-- Flashcard Screen -->
             <div id="flashcardScreen" class="screen">
                 <div class="flashcard-container">
-                    <!-- Progress Bar -->
                     <div class="progress-section">
                         <div class="progress-bar">
                             <div id="progressFill" class="progress-fill"></div>
@@ -80,7 +84,6 @@
                         </div>
                     </div>
 
-                    <!-- Main Flashcard -->
                     <div class="flashcard-wrapper">
                         <div id="flashcard" class="flashcard" onclick="revealGroup()">
                             <div class="flashcard-content">
@@ -90,47 +93,30 @@
                             </div>
                         </div>
                         
-                        <!-- Group Display (revealed on click) -->
                         <div id="groupInfo" class="group-info hidden">
                             <p class="group-label">Word Group</p>
                             <p id="groupDisplay" class="group-name"></p>
                         </div>
                     </div>
 
-                    <!-- State Buttons -->
                     <div class="button-group">
-                        <button class="btn btn-flag" onclick="markWord('flagged')">
-                            🚩 Flag
-                        </button>
-                        <button class="btn btn-known" onclick="markWord('known')">
-                            ✓ Known
-                        </button>
-                        <button class="btn btn-skip" onclick="markWord('unattempted')">
-                            ⊘ Skip
-                        </button>
+                        <button class="btn btn-flag" onclick="markWord('flagged')">🚩 Flag</button>
+                        <button class="btn btn-known" onclick="markWord('known')">✓ Known</button>
+                        <button class="btn btn-skip" onclick="markWord('unattempted')">⊘ Skip</button>
                     </div>
 
-                    <!-- Navigation -->
                     <div class="nav-controls">
-                        <button id="prevBtn" class="btn btn-secondary" onclick="previousWord()">
-                            ← Previous
-                        </button>
-                        <button id="nextBtn" class="btn btn-secondary" onclick="nextWord()">
-                            Next →
-                        </button>
+                        <button id="prevBtn" class="btn btn-secondary" onclick="previousWord()">← Previous</button>
+                        <button id="nextBtn" class="btn btn-secondary" onclick="nextWord()">Next →</button>
                     </div>
 
-                    <!-- Session Info -->
                     <div class="session-info">
                         <div class="info-badge">Known: <span id="knownCount">0</span></div>
                         <div class="info-badge flagged">Flagged: <span id="flaggedCount">0</span></div>
                         <div class="info-badge">Skipped: <span id="skippedCount">0</span></div>
                     </div>
 
-                    <!-- End Session Button -->
-                    <button class="btn btn-exit" onclick="endSession()">
-                        Exit Session
-                    </button>
+                    <button class="btn btn-exit" onclick="endSession()">Exit Session</button>
                 </div>
             </div>
 
@@ -138,19 +124,24 @@
             <div id="dashboardScreen" class="screen">
                 <div class="dashboard-content">
                     <h2>Progress Dashboard</h2>
-                    
                     <div class="dashboard-controls">
-                        <button class="btn btn-secondary" onclick="goToSelection()">
-                            ← Back to Selection
-                        </button>
-                        <button class="btn btn-danger" onclick="resetProgressConfirm()">
-                            Clear All Progress
-                        </button>
+                        <button class="btn btn-secondary" onclick="goToSelection()">← Back to Selection</button>
+                        <button class="btn btn-danger" onclick="resetProgressConfirm()">Clear All Progress</button>
                     </div>
+                    <div id="dashboardStats" class="dashboard-grid"></div>
+                </div>
+            </div>
 
-                    <div id="dashboardStats" class="dashboard-grid">
-                        <!-- Stats will be populated here -->
+            <!-- Search Results Screen -->
+            <div id="searchScreen" class="screen">
+                <div class="search-results-content">
+                    <div class="search-results-header">
+                        <button class="btn btn-secondary" onclick="closeSearch()">← Back</button>
+                        <h2>Search Results</h2>
+                        <span id="searchResultCount" class="results-badge"></span>
                     </div>
+                    <p id="searchQueryLabel" class="search-query-label"></p>
+                    <div id="searchResultsGrid" class="search-results-grid"></div>
                 </div>
             </div>
         </div>
