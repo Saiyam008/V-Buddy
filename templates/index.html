@@ -21,7 +21,6 @@
                 </div>
                 <div class="nav-buttons">
                     <button id="dashboardBtn" class="nav-btn" onclick="goToDashboard()">Dashboard</button>
-                    <button id="resetBtn" class="nav-btn danger" onclick="resetProgress()" style="display:none;">Reset Progress</button>
                     <a href="/logout" class="nav-btn logout-btn">Logout ({{ username }})</a>
                 </div>
             </div>
@@ -29,19 +28,21 @@
 
         <!-- Main Container -->
         <div class="container">
+
             <!-- List Selection Screen -->
             <div id="selectionScreen" class="screen active">
                 <div class="selection-content">
                     <h2>Select Lists to Study</h2>
-                    <p class="subtitle">You can select one or multiple lists</p>
-                    
+                    <p class="subtitle">Choose one or more lists, then pick your mode</p>
+
                     <div class="list-selector">
                         <div id="listCheckboxes" class="checkbox-grid"></div>
                     </div>
 
-                    <div class="filter-section">
-                        <h3>Filter Words By Status</h3>
-                        <p class="filter-subtitle">Select which word statuses to include (default: all selected)</p>
+                    <!-- Filter Section (only for Revise) -->
+                    <div class="filter-section" id="filterSection">
+                        <h3>Filter Words By Status <span class="filter-mode-hint">(Revise mode only)</span></h3>
+                        <p class="filter-subtitle">Select which word statuses to include</p>
                         <div class="filter-toggles">
                             <label class="toggle-item">
                                 <input type="checkbox" id="filterKnown" checked onchange="updateFilterSelection()">
@@ -60,19 +61,47 @@
                             </label>
                         </div>
                     </div>
-                    
+
                     <div class="selection-stats">
                         <p id="selectedCount">0 lists selected</p>
                         <p id="totalWordsCount"></p>
                     </div>
-                    
-                    <button id="startBtn" class="btn btn-primary" onclick="startSession()" disabled>
-                        Start Study Session
-                    </button>
+
+                    <!-- Mode Buttons -->
+                    <div class="mode-buttons" id="modeButtons">
+                        <button class="btn btn-learn" onclick="startLearnMode()" id="learnBtn" disabled>
+                            📖 Learn
+                        </button>
+                        <button class="btn btn-revise" onclick="startReviseMode()" id="reviseBtn" disabled>
+                            🧠 Revise
+                        </button>
+                    </div>
+                    <p class="mode-hint">
+                        <strong>Learn</strong> — browse word groups &amp; vocabulary &nbsp;|&nbsp;
+                        <strong>Revise</strong> — flashcard quiz with known / flagged / skip
+                    </p>
                 </div>
             </div>
 
-            <!-- Flashcard Screen -->
+            <!-- ── Learn Screen ── -->
+            <div id="learnScreen" class="screen">
+                <div class="learn-content">
+                    <div class="learn-header">
+                        <button class="btn btn-secondary" onclick="goToSelection()">← Back</button>
+                        <div class="learn-header-text">
+                            <h2>Learn Mode</h2>
+                            <p id="learnSubtitle" class="subtitle"></p>
+                        </div>
+                        <div class="learn-header-controls">
+                            <button class="btn btn-outline-sm" onclick="expandAllGroups()">Expand All</button>
+                            <button class="btn btn-outline-sm" onclick="collapseAllGroups()">Collapse All</button>
+                        </div>
+                    </div>
+                    <div id="learnBody"></div>
+                </div>
+            </div>
+
+            <!-- ── Flashcard / Revise Screen ── -->
             <div id="flashcardScreen" class="screen">
                 <div class="flashcard-container">
                     <div class="progress-section">
@@ -92,7 +121,6 @@
                                 <p class="flashcard-hint">Click card to reveal group</p>
                             </div>
                         </div>
-                        
                         <div id="groupInfo" class="group-info hidden">
                             <p class="group-label">Word Group</p>
                             <p id="groupDisplay" class="group-name"></p>
@@ -100,9 +128,9 @@
                     </div>
 
                     <div class="button-group">
-                        <button class="btn btn-flag" onclick="markWord('flagged')">🚩 Flag</button>
+                        <button class="btn btn-flag"  onclick="markWord('flagged')">🚩 Flag</button>
                         <button class="btn btn-known" onclick="markWord('known')">✓ Known</button>
-                        <button class="btn btn-skip" onclick="markWord('unattempted')">⊘ Skip</button>
+                        <button class="btn btn-skip"  onclick="markWord('unattempted')">⊘ Skip</button>
                     </div>
 
                     <div class="nav-controls">
@@ -120,7 +148,7 @@
                 </div>
             </div>
 
-            <!-- Dashboard Screen -->
+            <!-- ── Dashboard Screen ── -->
             <div id="dashboardScreen" class="screen">
                 <div class="dashboard-content">
                     <h2>Progress Dashboard</h2>
@@ -132,7 +160,7 @@
                 </div>
             </div>
 
-            <!-- Search Results Screen -->
+            <!-- ── Search Results Screen ── -->
             <div id="searchScreen" class="screen">
                 <div class="search-results-content">
                     <div class="search-results-header">
@@ -144,6 +172,7 @@
                     <div id="searchResultsGrid" class="search-results-grid"></div>
                 </div>
             </div>
+
         </div>
     </div>
 

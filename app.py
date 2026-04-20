@@ -150,6 +150,26 @@ def get_lists():
     })
 
 
+@app.route('/api/learn-data')
+@login_required
+def get_learn_data():
+    """Return grouped word data for selected lists"""
+    lists_param = request.args.get('lists', '')
+    selected_lists = [l.strip() for l in lists_param.split(',') if l.strip()] if lists_param else []
+
+    if not selected_lists:
+        return jsonify({"error": "No lists specified"}), 400
+
+    result = {}
+    for list_name in selected_lists:
+        if list_name in ALL_LISTS:
+            result[list_name] = {}
+            for group_name, words in ALL_LISTS[list_name].items():
+                result[list_name][group_name] = words
+
+    return jsonify({"data": result, "selected_lists": selected_lists})
+
+
 @app.route('/api/search')
 @login_required
 def search_words():
