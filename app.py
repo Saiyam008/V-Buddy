@@ -4,12 +4,11 @@ Flask backend for interactive vocabulary revision
 """
 import os
 import random
+import sqlite3
 from datetime import timedelta
 from functools import wraps
 from pathlib import Path
 
-import psycopg2
-import psycopg2.extras
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 
 app = Flask(__name__,
@@ -17,45 +16,54 @@ app = Flask(__name__,
             static_url_path='/static',
             template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
 
-app.secret_key = 'gre-vocab-secret-key-2024'
+app.secret_key = os.environ.get('SECRET_KEY', 'gre-vocab-secret-key-2024')
 app.permanent_session_lifetime = timedelta(days=60)
+# SameSite=None + Secure needed for proxied environments (HF Spaces, Replit)
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 app.config['SESSION_COOKIE_SECURE'] = True
 
-VALID_USERNAME = 'saiyam'
-VALID_PASSWORD = 'saiyam'
+VALID_USERNAME = os.environ.get('APP_USERNAME', 'saiyam')
+VALID_PASSWORD = os.environ.get('APP_PASSWORD', 'saiyam')
 
 UPDATED_LISTS_DIR = Path(__file__).parent / "UpdatedLists"
+
+# ── Database path ─────────────────────────────────────────────────────────────
+# Use /data if available (HF Spaces persistent storage), else local ./data
+_data_dir = Path("/data") if Path("/data").exists() and os.access("/data", os.W_OK) else Path(__file__).parent / "data"
+_data_dir.mkdir(parents=True, exist_ok=True)
+DB_PATH = _data_dir / "word_states.db"
 
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+logger.info(f"Using database at: {DB_PATH}")
 
 
-# ── Database ──────────────────────────────────────────────────────────────────
+# ── SQLite helpers ────────────────────────────────────────────────────────────
 
 def get_db():
-    conn = psycopg2.connect(os.environ['DATABASE_URL'])
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
 def ensure_schema():
     with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                CREATE TABLE IF NOT EXISTS word_states (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(100) NOT NULL,
-                    list_name VARCHAR(100) NOT NULL,
-                    word_key TEXT NOT NULL,
-                    state VARCHAR(20) NOT NULL DEFAULT 'unattempted',
-                    group_name TEXT NOT NULL,
-                    updated_at TIMESTAMP DEFAULT NOW(),
-                    UNIQUE(username, list_name, word_key)
-                );
-                CREATE INDEX IF NOT EXISTS idx_word_states_user ON word_states(username);
-                CREATE INDEX IF NOT EXISTS idx_word_states_user_list ON word_states(username, list_name);
-            """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS word_states (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                username    TEXT NOT NULL,
+                list_name   TEXT NOT NULL,
+                word_key    TEXT NOT NULL,
+                state       TEXT NOT NULL DEFAULT 'unattempted',
+                group_name  TEXT NOT NULL,
+                updated_at  TEXT DEFAULT (datetime('now')),
+                UNIQUE(username, list_name, word_key)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ws_user      ON word_states(username)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ws_user_list ON word_states(username, list_name)")
         conn.commit()
 
 
@@ -85,68 +93,65 @@ def load_all_lists():
 ALL_LISTS = load_all_lists()
 
 
-# ── DB helpers ─────────────────────────────────────────────────────────────────
+# ── DB operations ──────────────────────────────────────────────────────────────
 
 def load_word_states_db(username, list_names=None):
-    """
-    Returns a nested dict: { list_name: { word_key: {state, group} } }
-    If list_names is given, only fetch those lists.
-    """
+    """Return { list_name: { word_key: {state, group} } }"""
     states = {}
     with get_db() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-            if list_names:
-                cur.execute(
-                    "SELECT list_name, word_key, state, group_name FROM word_states "
-                    "WHERE username = %s AND list_name = ANY(%s)",
-                    (username, list_names)
-                )
-            else:
-                cur.execute(
-                    "SELECT list_name, word_key, state, group_name FROM word_states "
-                    "WHERE username = %s",
-                    (username,)
-                )
-            for row in cur.fetchall():
-                ln = row['list_name']
-                if ln not in states:
-                    states[ln] = {}
-                states[ln][row['word_key']] = {
-                    'state': row['state'],
-                    'group': row['group_name']
-                }
+        if list_names:
+            placeholders = ",".join("?" * len(list_names))
+            rows = conn.execute(
+                f"SELECT list_name, word_key, state, group_name FROM word_states "
+                f"WHERE username=? AND list_name IN ({placeholders})",
+                [username] + list(list_names)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT list_name, word_key, state, group_name FROM word_states WHERE username=?",
+                (username,)
+            ).fetchall()
+    for row in rows:
+        ln = row["list_name"]
+        if ln not in states:
+            states[ln] = {}
+        states[ln][row["word_key"]] = {"state": row["state"], "group": row["group_name"]}
     return states
 
 
 def upsert_word_state_db(username, list_name, word_key, state, group_name):
     with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO word_states (username, list_name, word_key, state, group_name, updated_at)
-                VALUES (%s, %s, %s, %s, %s, NOW())
-                ON CONFLICT (username, list_name, word_key)
-                DO UPDATE SET state = EXCLUDED.state,
-                              group_name = EXCLUDED.group_name,
-                              updated_at = NOW()
-            """, (username, list_name, word_key, state, group_name))
+        conn.execute("""
+            INSERT INTO word_states (username, list_name, word_key, state, group_name, updated_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(username, list_name, word_key)
+            DO UPDATE SET state=excluded.state,
+                          group_name=excluded.group_name,
+                          updated_at=datetime('now')
+        """, (username, list_name, word_key, state, group_name))
+        conn.commit()
+
+
+def bulk_insert_defaults(username, entries):
+    """Insert (list_name, word_key, group_name) as 'unattempted' if not exists."""
+    if not entries:
+        return
+    with get_db() as conn:
+        conn.executemany("""
+            INSERT OR IGNORE INTO word_states (username, list_name, word_key, state, group_name)
+            VALUES (?, ?, ?, 'unattempted', ?)
+        """, [(username, ln, wk, gn) for ln, wk, gn in entries])
         conn.commit()
 
 
 def reset_progress_db(username):
     with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM word_states WHERE username = %s", (username,))
+        conn.execute("DELETE FROM word_states WHERE username=?", (username,))
         conn.commit()
 
 
 def get_word_states_for_session(username, selected_lists):
-    """
-    Load existing states from DB, ensuring every word in selected lists
-    has an entry (unattempted by default). Returns nested dict.
-    """
     existing = load_word_states_db(username, selected_lists)
-
-    # Collect words that need to be inserted (new words not yet in DB)
     to_insert = []
     for list_name in selected_lists:
         if list_name not in existing:
@@ -156,19 +161,9 @@ def get_word_states_for_session(username, selected_lists):
                 for word in words:
                     word_key = f"{group_name}||{word}"
                     if word_key not in existing[list_name]:
-                        existing[list_name][word_key] = {'state': 'unattempted', 'group': group_name}
-                        to_insert.append((username, list_name, word_key, 'unattempted', group_name))
-
-    if to_insert:
-        with get_db() as conn:
-            with conn.cursor() as cur:
-                psycopg2.extras.execute_values(cur, """
-                    INSERT INTO word_states (username, list_name, word_key, state, group_name)
-                    VALUES %s
-                    ON CONFLICT (username, list_name, word_key) DO NOTHING
-                """, to_insert)
-            conn.commit()
-
+                        existing[list_name][word_key] = {"state": "unattempted", "group": group_name}
+                        to_insert.append((list_name, word_key, group_name))
+    bulk_insert_defaults(username, to_insert)
     return existing
 
 
@@ -231,12 +226,7 @@ def get_learn_data():
     selected_lists = [l.strip() for l in lists_param.split(',') if l.strip()] if lists_param else []
     if not selected_lists:
         return jsonify({"error": "No lists specified"}), 400
-
-    result = {}
-    for list_name in selected_lists:
-        if list_name in ALL_LISTS:
-            result[list_name] = dict(ALL_LISTS[list_name])
-
+    result = {ln: dict(ALL_LISTS[ln]) for ln in selected_lists if ln in ALL_LISTS}
     return jsonify({"data": result, "selected_lists": selected_lists})
 
 
@@ -246,14 +236,12 @@ def search_words():
     query = request.args.get('q', '').strip().lower()
     if not query:
         return jsonify({"results": [], "query": query})
-
     results = []
     for list_name, groups in ALL_LISTS.items():
         for group_name, words in groups.items():
             for word in words:
                 if query in word.lower():
                     results.append({"word": word, "group": group_name, "list": list_name})
-
     results.sort(key=lambda x: (not x['word'].lower().startswith(query), x['word'].lower()))
     return jsonify({"results": results, "query": query, "total": len(results)})
 
@@ -265,30 +253,28 @@ def start_session():
     data = request.json
     selected_lists = data.get('lists', [])
     filters = data.get('filters', {'known': True, 'flagged': True, 'unmarked': True})
-
     if not selected_lists:
         return jsonify({"error": "No lists selected"}), 400
 
     word_states = get_word_states_for_session(username, selected_lists)
 
-    all_words = []
-    for list_name in selected_lists:
-        if list_name in ALL_LISTS:
-            for group_name, words in ALL_LISTS[list_name].items():
-                for word in words:
-                    all_words.append({"list": list_name, "word": word, "group": group_name})
+    all_words = [
+        {"list": ln, "word": word, "group": gn}
+        for ln in selected_lists if ln in ALL_LISTS
+        for gn, words in ALL_LISTS[ln].items()
+        for word in words
+    ]
 
     filtered_words = []
-    for word in all_words:
-        word_key = f"{word['group']}||{word['word']}"
-        state = word_states.get(word['list'], {}).get(word_key, {}).get('state', 'unattempted')
-        if (state == 'known'        and filters.get('known', True)) or \
-           (state == 'flagged'      and filters.get('flagged', True)) or \
-           (state == 'unattempted'  and filters.get('unmarked', True)):
-            filtered_words.append(word)
+    for w in all_words:
+        wk = f"{w['group']}||{w['word']}"
+        state = word_states.get(w['list'], {}).get(wk, {}).get('state', 'unattempted')
+        if ((state == 'known'       and filters.get('known', True)) or
+            (state == 'flagged'     and filters.get('flagged', True)) or
+            (state == 'unattempted' and filters.get('unmarked', True))):
+            filtered_words.append(w)
 
     random.shuffle(filtered_words)
-
     return jsonify({
         "total_words": len(filtered_words),
         "words": filtered_words,
@@ -306,12 +292,9 @@ def update_word_state():
     word      = data.get('word')
     group     = data.get('group')
     state     = data.get('state')
-
     if not all([list_name, word, group, state]):
         return jsonify({"error": "Missing required fields"}), 400
-
-    word_key = f"{group}||{word}"
-    upsert_word_state_db(username, list_name, word_key, state, group)
+    upsert_word_state_db(username, list_name, f"{group}||{word}", state, group)
     return jsonify({"success": True})
 
 
@@ -321,41 +304,30 @@ def get_dashboard():
     username = session['username']
     all_states = load_word_states_db(username)
     dashboard = {}
-
     for list_name in sorted(ALL_LISTS.keys()):
         known = flagged = unattempted = total = 0
         for group_name, words in ALL_LISTS[list_name].items():
             for word in words:
                 total += 1
-                word_key = f"{group_name}||{word}"
-                state = all_states.get(list_name, {}).get(word_key, {}).get('state', 'unattempted')
-                if state == 'known':
-                    known += 1
-                elif state == 'flagged':
-                    flagged += 1
-                else:
-                    unattempted += 1
-
+                state = all_states.get(list_name, {}).get(f"{group_name}||{word}", {}).get('state', 'unattempted')
+                if state == 'known':       known += 1
+                elif state == 'flagged':   flagged += 1
+                else:                      unattempted += 1
         dashboard[list_name] = {
-            "total": total,
-            "known": known,
-            "flagged": flagged,
+            "total": total, "known": known, "flagged": flagged,
             "unattempted": unattempted,
             "percentage_known": round((known / total * 100) if total > 0 else 0, 1)
         }
-
     return jsonify(dashboard)
 
 
 @app.route('/api/reset-progress', methods=['POST'])
 @login_required
 def reset_progress():
-    username = session['username']
-    reset_progress_db(username)
+    reset_progress_db(session['username'])
     return jsonify({"success": True})
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_ENV') == 'development'
-    app.run(debug=debug, host='0.0.0.0', port=port)
+    port = int(os.environ.get('PORT', 7860))
+    app.run(debug=False, host='0.0.0.0', port=port)

@@ -1,26 +1,27 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies first (cached layer)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all application files
-COPY app.py /app/
-COPY templates/ /app/templates/
-COPY static/ /app/static/
-COPY UpdatedLists/ /app/UpdatedLists/
+# Copy application files
+COPY app.py .
+COPY templates/ ./templates/
+COPY static/ ./static/
+COPY UpdatedLists/ ./UpdatedLists/
 
-# Create data directory for persistent storage
+# Local fallback data directory (used when /data persistent storage is not available)
 RUN mkdir -p /app/data
 
-# Set environment variables
+# HF Spaces runs as a non-root user; ensure /app is writable
+RUN chmod -R 777 /app/data
+
 ENV PYTHONUNBUFFERED=1
 ENV FLASK_APP=app.py
 
-# Expose port for Hugging Face Spaces
+# Hugging Face Spaces expects port 7860
 EXPOSE 7860
 
-# Run the application
 CMD ["python", "-u", "app.py"]
