@@ -10,11 +10,13 @@ from functools import wraps
 from pathlib import Path
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__,
             static_folder=os.path.join(os.path.dirname(__file__), 'static'),
             static_url_path='/static',
             template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 app.secret_key = os.environ.get('SECRET_KEY', 'gre-vocab-secret-key-2024')
 app.permanent_session_lifetime = timedelta(days=60)
