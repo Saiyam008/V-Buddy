@@ -177,7 +177,7 @@ def login_required(f):
         if not session.get('logged_in'):
             if request.is_json or request.path.startswith('/api/'):
                 return jsonify({"error": "Unauthorized"}), 401
-            return redirect(url_for('login'))
+            return redirect('/login')
         return f(*args, **kwargs)
     return decorated
 
@@ -185,7 +185,7 @@ def login_required(f):
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if session.get('logged_in'):
-        return redirect(url_for('index'))
+        return redirect('/')
     error = None
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
@@ -194,7 +194,7 @@ def login():
             session.permanent = True
             session['logged_in'] = True
             session['username'] = username
-            return redirect(url_for('index'))
+            return redirect('/')
         error = 'Invalid username or password.'
     return render_template('login.html', error=error)
 
@@ -202,7 +202,7 @@ def login():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('login'))
+    return redirect('/login')
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
