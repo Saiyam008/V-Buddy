@@ -142,7 +142,12 @@ function renderLearnScreen(data, selectedLists) {
         const groupsContainer = document.createElement('div');
         groupsContainer.className = 'learn-groups';
 
-        Object.entries(groups).forEach(([groupName, words], idx) => {
+        const sortedGroups = Object.entries(groups).sort(([nameA, wordsA], [nameB, wordsB]) => {
+            if (wordsB.length !== wordsA.length) return wordsB.length - wordsA.length;
+            return nameA.localeCompare(nameB);
+        });
+
+        sortedGroups.forEach(([groupName, words], idx) => {
             const card = document.createElement('div');
             card.className = 'learn-group-card';
             card.dataset.groupId = `${listName}-${idx}`;
