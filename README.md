@@ -1,83 +1,102 @@
 ---
-title: GRE Vocabulary Flashcard
+title: GRE Vocabulary Flashcard (V-Buddy)
 emoji: 📚
 colorFrom: blue
 colorTo: purple
 sdk: docker
 app_port: 7860
 pinned: false
+license: mit
+short_description: Modern interactive GRE vocabulary learning platform with spaced flashcards, custom lists, and progress tracking.
 ---
 
-# GRE Vocabulary Flashcard Web Application
+# 📚 V-Buddy: Interactive GRE Vocabulary Learning Platform
 
-A modern, interactive web application for GRE vocabulary revision with two study modes, cross-list search, and persistent progress tracking.
+A comprehensive, full-featured web application designed to accelerate GRE / SAT / TOEFL vocabulary mastery through structured word groupings, active recall flashcards, live cross-list search, and persistent user progress tracking.
 
-## Features
+---
 
-**📖 Learn Mode**
-- Browse vocabulary organised by word groups
-- Groups sorted by size (largest first), then alphabetically
-- Expand / collapse individual groups
-- Works across one or multiple lists simultaneously
+## 🌟 Architecture & Study Modes
 
-**🧠 Revise Mode**
-- Flashcard-style quiz with randomly shuffled words
-- Mark words as: Known (✓), Flagged (🚩), or Skipped (⊘)
-- Filter by word status before starting
-- Progress saved permanently per user
-
-**🔍 Search**
-- Live search across all 14 word lists
-- Results show word, list name, and group
-
-**📊 Dashboard**
-- Per-list progress: Known / Flagged / Unattempted counts
-- Visual progress bars and percentage completion
-
-## Local Development
-
-```bash
-pip install -r requirements.txt
-python app.py          # runs on http://localhost:7860
+```mermaid
+graph TD
+    User["GRE Aspirant / Student"] --> UI["Web App Interface (Bootstrap 5 + Jinja2)"]
+    UI --> Auth["User Authentication & SQLite Database"]
+    
+    UI --> Learn["📖 Learn Mode"]
+    Learn --> Groups["Word Groups Hierarchy (Categorized by Themes & Synonyms)"]
+    Groups --> Expand["Interactive Expand / Collapse Views"]
+    
+    UI --> Revise["🧠 Revise Flashcards Mode"]
+    Revise --> Quiz["Spaced Flashcard Recall Engine"]
+    Quiz --> Actions["Word Feedback: Known (✓) / Flagged (🚩) / Skipped (⊘)"]
+    Actions --> Save["Persistent State Sync to SQLite"]
+    
+    UI --> Search["🔍 Live Instant Search"]
+    Search --> Vocab15["15 Curated GRE Word Lists (1,500+ Words)"]
+    
+    Save --> Dash["📊 Performance Dashboard"]
+    Dash --> Analytics["Completion % & Mastery Bar Charts"]
 ```
 
-Or with Docker:
+---
 
-```bash
-docker build -t gre-vocab .
-docker run -p 7860:7860 gre-vocab
+## 🚀 Key Features
+
+- **📖 Learn Mode**: Browse high-frequency GRE words structured into conceptual semantic clusters. Word groups are automatically sorted by cluster size and alphabetical order with expandable cards.
+- **🧠 Active Recall & Flashcard Quizzing**: Interactive front-and-back flashcard testing with randomized shuffling. Instantly tag words as **Known (✓)**, **Flagged (🚩)**, or **Skipped (⊘)** to target weak vocabulary.
+- **🔍 Instant Universal Search**: Live real-time search across all 15 master word lists with instant highlighting of definitions, parts of speech, synonyms, and mnemonics.
+- **📊 Real-Time Analytics Dashboard**: Detailed visual progress meters per word list displaying total mastered words, flagged terms for review, and overall completion percentages.
+- **🔒 Multi-User Persistence**: Lightweight SQLite database backend preserving individual learning profiles, custom flagged words, and study streaks.
+- **🐳 Docker & Cloud Ready**: Fully containerized and configured for one-click deployment on Hugging Face Spaces, Docker, or any cloud VM.
+
+---
+
+## 📁 Repository Structure
+
 ```
-
-## File Structure
-
-```
-├── app.py                  # Flask backend (SQLite storage)
-├── requirements.txt
-├── templates/
-│   ├── index.html          # Main app
-│   └── login.html          # Login page
-├── static/
+├── app.py                     # Main Flask web application & SQLite ORM routes
+├── requirements.txt           # Python dependencies
+├── Dockerfile                 # Docker container specification (Port 7860)
+├── UpdatedLists/              # 15 structured GRE vocabulary module datasets
+│   ├── list1.py ... list15.py # Individual word groupings and definitions
+├── static/                    # Frontend styling, scripts, and media
 │   ├── css/style.css
 │   └── js/app.js
-└── UpdatedLists/
-    ├── list1.py … list14.py
+└── templates/                 # Jinja2 responsive HTML templates
+    ├── index.html             # Core dashboard, Learn, and Revise views
+    └── login.html             # User authentication screen
 ```
 
-## API Endpoints
+---
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/lists` | All available lists |
-| GET | `/api/learn-data?lists=List+1,List+2` | Word groups for Learn mode |
-| GET | `/api/search?q=query` | Search across all lists |
-| POST | `/api/start-session` | Start a Revise session |
-| POST | `/api/update-word-state` | Save a word's state |
-| GET | `/api/dashboard` | Progress statistics |
-| POST | `/api/reset-progress` | Clear all progress |
+## 🛠️ Local Development & Quickstart
 
-## Keyboard Shortcuts (Revise mode)
+### 1. Python Environment Setup
+```bash
+git clone https://github.com/Saiyam008/V-Buddy.git
+cd V-Buddy
 
-| Key | Action |
-|---|---|
-| `←` / `→` | Previous / Next word |
-| `Space` | Reveal word group |
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the app
+python app.py
+```
+Open [http://localhost:7860](http://localhost:7860) in your browser.
+
+### 2. Run with Docker
+```bash
+docker build -t v-buddy .
+docker run -p 7860:7860 v-buddy
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
