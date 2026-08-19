@@ -1,0 +1,1 @@
+- [GitHub publishing](github-publishing.md) — when shell Git transport lacks credentials, the attached GitHub API can publish the local tree safely.
