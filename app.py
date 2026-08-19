@@ -11,6 +11,7 @@ from pathlib import Path
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__,
             static_folder=os.path.join(os.path.dirname(__file__), 'static'),
@@ -18,19 +19,17 @@ app = Flask(__name__,
             template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-app.secret_key = os.environ.get('SECRET_KEY', 'gre-vocab-secret-key-2024')
+app.secret_key = os.environ.get('SESSION_SECRET') or os.environ.get('SECRET_KEY', 'gre-vocab-session')
 app.permanent_session_lifetime = timedelta(days=60)
-# SameSite=None + Secure needed for proxied environments (HF Spaces, Replit)
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'
 app.config['SESSION_COOKIE_SECURE'] = True
 
-VALID_USERNAME = os.environ.get('APP_USERNAME', 'saiyam')
-VALID_PASSWORD = os.environ.get('APP_PASSWORD', 'saiyam')
+DEFAULT_USERNAME = 'saiyam'
+DEFAULT_PASSWORD = 'saiyam'
 
 UPDATED_LISTS_DIR = Path(__file__).parent / "UpdatedLists"
 
 # ── Database path ─────────────────────────────────────────────────────────────
-# Use /data if available (HF Spaces persistent storage), else local ./data
 _data_dir = Path("/data") if Path("/data").exists() and os.access("/data", os.W_OK) else Path(__file__).parent / "data"
 _data_dir.mkdir(parents=True, exist_ok=True)
 DB_PATH = _data_dir / "word_states.db"
@@ -64,8 +63,25 @@ def ensure_schema():
                 UNIQUE(username, list_name, word_key)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                username      TEXT UNIQUE,
+                email         TEXT UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at    TEXT DEFAULT (datetime('now'))
+            )
+        """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ws_user      ON word_states(username)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ws_user_list ON word_states(username, list_name)")
+        existing_default = conn.execute(
+            "SELECT id FROM users WHERE username=?", (DEFAULT_USERNAME,)
+        ).fetchone()
+        if not existing_default:
+            conn.execute(
+                "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
+                (DEFAULT_USERNAME, None, generate_password_hash(DEFAULT_PASSWORD))
+            )
         conn.commit()
 
 
@@ -90,6 +106,34 @@ def load_all_lists():
             except Exception as e:
                 logger.error(f"Error loading {list_file}: {e}")
     return lists
+
+
+def display_word(word):
+    """Remove source names while retaining one star for each listed source."""
+    def replace_sources(match):
+        sources = [source.strip() for source in match.group(1).split(',') if source.strip()]
+        return f" {'★' * len(sources)}" if sources else ''
+
+    import re
+    return re.sub(r'\s*\{([^}]*)\}', replace_sources, word).strip()
+
+
+def display_lists(lists):
+    return {
+        list_name: {
+            group_name: [display_word(word) for word in words]
+            for group_name, words in groups.items()
+        }
+        for list_name, groups in lists.items()
+    }
+
+
+def raw_word_for_display(list_name, group_name, word):
+    """Resolve a displayed word back to its original storage value."""
+    for candidate in ALL_LISTS.get(list_name, {}).get(group_name, []):
+        if candidate == word or display_word(candidate) == word:
+            return candidate
+    return word
 
 
 ALL_LISTS = load_all_lists()
@@ -188,15 +232,50 @@ def login():
         return redirect('/')
     error = None
     if request.method == 'POST':
-        username = request.form.get('username', '').strip()
+        identifier = request.form.get('identifier', '').strip()
         password = request.form.get('password', '').strip()
-        if username == VALID_USERNAME and password == VALID_PASSWORD:
+        with get_db() as conn:
+            user = conn.execute(
+                "SELECT username, email, password_hash FROM users "
+                "WHERE username=? OR email=? COLLATE NOCASE",
+                (identifier, identifier)
+            ).fetchone()
+        if user and check_password_hash(user['password_hash'], password):
             session.permanent = True
             session['logged_in'] = True
-            session['username'] = username
+            session['username'] = user['username'] or user['email']
             return redirect('/')
         error = 'Invalid username or password.'
     return render_template('login.html', error=error)
+
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if session.get('logged_in'):
+        return redirect('/')
+    error = None
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        confirmation = request.form.get('confirm_password', '')
+        if not email or '@' not in email:
+            error = 'Enter a valid email address.'
+        elif len(password) < 8:
+            error = 'Password must be at least 8 characters.'
+        elif password != confirmation:
+            error = 'Passwords do not match.'
+        else:
+            try:
+                with get_db() as conn:
+                    conn.execute(
+                        "INSERT INTO users (email, password_hash) VALUES (?, ?)",
+                        (email, generate_password_hash(password))
+                    )
+                    conn.commit()
+                return redirect(url_for('login', registered='1'))
+            except sqlite3.IntegrityError:
+                error = 'An account with that email already exists.'
+    return render_template('signup.html', error=error)
 
 
 @app.route('/logout')
@@ -228,7 +307,7 @@ def get_learn_data():
     selected_lists = [l.strip() for l in lists_param.split(',') if l.strip()] if lists_param else []
     if not selected_lists:
         return jsonify({"error": "No lists specified"}), 400
-    result = {ln: dict(ALL_LISTS[ln]) for ln in selected_lists if ln in ALL_LISTS}
+    result = display_lists({ln: ALL_LISTS[ln] for ln in selected_lists if ln in ALL_LISTS})
     return jsonify({"data": result, "selected_lists": selected_lists})
 
 
@@ -243,7 +322,7 @@ def search_words():
         for group_name, words in groups.items():
             for word in words:
                 if query in word.lower():
-                    results.append({"word": word, "group": group_name, "list": list_name})
+                    results.append({"word": display_word(word), "group": group_name, "list": list_name})
     results.sort(key=lambda x: (not x['word'].lower().startswith(query), x['word'].lower()))
     return jsonify({"results": results, "query": query, "total": len(results)})
 
@@ -277,9 +356,13 @@ def start_session():
             filtered_words.append(w)
 
     random.shuffle(filtered_words)
+    response_words = [
+        {**word, "word": display_word(word["word"])}
+        for word in filtered_words
+    ]
     return jsonify({
         "total_words": len(filtered_words),
-        "words": filtered_words,
+        "words": response_words,
         "states": word_states,
         "selected_lists": selected_lists
     })
@@ -296,7 +379,8 @@ def update_word_state():
     state     = data.get('state')
     if not all([list_name, word, group, state]):
         return jsonify({"error": "Missing required fields"}), 400
-    upsert_word_state_db(username, list_name, f"{group}||{word}", state, group)
+    raw_word = raw_word_for_display(list_name, group, word)
+    upsert_word_state_db(username, list_name, f"{group}||{raw_word}", state, group)
     return jsonify({"success": True})
 
 

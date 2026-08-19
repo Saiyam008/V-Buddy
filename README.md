@@ -34,22 +34,6 @@ A modern, interactive web application for GRE vocabulary revision with two study
 - Per-list progress: Known / Flagged / Unattempted counts
 - Visual progress bars and percentage completion
 
-## Deployment on Hugging Face Spaces
-
-This app uses the **Docker** SDK. To deploy:
-
-1. Create a new Space → select **Docker** runtime
-2. Push (or upload) the repository contents — the `Dockerfile` handles everything
-3. Set optional environment variables in Space Settings → Repository secrets:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `APP_USERNAME` | `saiyam` | Login username |
-| `APP_PASSWORD` | `saiyam` | Login password |
-| `SECRET_KEY` | built-in | Flask session secret |
-
-4. If you enable **Persistent Storage** for the Space, the SQLite database is automatically stored at `/data/word_states.db` and survives restarts. Without persistent storage the database resets when the Space restarts.
-
 ## Local Development
 
 ```bash
@@ -69,7 +53,6 @@ docker run -p 7860:7860 gre-vocab
 ```
 ├── app.py                  # Flask backend (SQLite storage)
 ├── requirements.txt
-├── Dockerfile
 ├── templates/
 │   ├── index.html          # Main app
 │   └── login.html          # Login page
